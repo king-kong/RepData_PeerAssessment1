@@ -1,20 +1,121 @@
 # Reproducible Research: Peer Assessment 1
 
+## I. Loading and preprocessing the data
+### 1. Load the data (i.e. read.csv())
+```{r echo=TRUE}
+repdata <- read.csv('activity.csv')
+```
+### 2. Process/transform the data (if necessary) into a format suitable for your analysis
+Remove NA steps and ensure the correct data types are used.
+```{r echo=TRUE}
+repdata_clean <- repdata[!is.na(repdata$steps),]
+repdata_clean$date <- as.Date(repdata_clean$date)
+repdata_clean$steps <- as.numeric(repdata_clean$steps)
+```
+<br/>
+## II. What is mean total number of steps taken per day?
+### 1. Make a histogram of the total number of steps taken each day
+```{r echo=TRUE, fig.width=10, fig.height=8, message=FALSE}
+#draw histogram
+hist(with(repdata_clean, tapply(steps, date, sum)), main=paste("Histogram of the Total Number of Steps Taken Each Day"), xlab=paste("Total Number of Steps Taken Each Day"), col="red")
+```
+### 2. Calculate and report the mean and median total number of steps taken per day
+```{r echo=TRUE}
+#mean
+with(repdata_clean, tapply(steps, date, mean))
 
-## Loading and preprocessing the data
+#median
+with(repdata_clean, tapply(steps, date, median))
+```
 
+## III. What is the average daily activity pattern?
+### 1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r echo=TRUE, fig.width=10, fig.height=8, message=FALSE}
+#create a temporary data frame 
+interval_ts <- as.data.frame(with(repdata_clean, tapply(steps, interval, mean)))
+interval_ts$interval <- rownames(interval_ts)
+colnames(interval_ts) <- c('average_steps', 'interval')
+#plot the time series analysis
+plot(interval_ts$interval, interval_ts$average_steps, type="l", ylab=paste("Average Number of Steps"), xlab=paste("5-minute Interval Label"))
+```
+### 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r echo=TRUE}
+interval_ts[interval_ts$average_steps == max(interval_ts$average_steps),]
+```
 
+## IV. Inputing missing values
+### 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+Number of NA's for 'steps' is 2304.
+```{r echo=TRUE}
+summary(repdata)
+```
+### 2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+Use the average number of steps for that interval.  If it is a weekday, use the weekday average.  If it is a weekend, use the weekend average.
+```{r echo=TRUE}
+#separate repdata_clean into two data frames (weekdays and weekends)
+repdata_clean_weekend <- repdata_clean[(weekdays(repdata_clean$date) == "Saturday" | weekdays(repdata_clean$date) == "Sunday"),]
+repdata_clean_weekday <- repdata_clean[!(weekdays(repdata_clean$date) == "Saturday" | weekdays(repdata_clean$date) == "Sunday"),]
+#calculate interval averages
+interval_ts_weekend <- as.data.frame(with(repdata_clean_weekend, tapply(steps, interval, mean)))
+interval_ts_weekday <- as.data.frame(with(repdata_clean_weekday, tapply(steps, interval, mean)))
+interval_ts_weekend$interval <- rownames(interval_ts_weekend)
+interval_ts_weekday$interval <- rownames(interval_ts_weekday)
+colnames(interval_ts_weekday) <- c('average_steps', 'interval')
+colnames(interval_ts_weekend) <- c('average_steps', 'interval')
+#remove unnecessary objects
+rm(repdata_clean_weekend)
+rm(repdata_clean_weekday)
+```
+### 3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+``` {r echo=TRUE}
+repdata_clean_with_no_na <- repdata
+repdata_clean_with_no_na$date <- as.Date(repdata_clean_with_no_na$date)
+trim <- function( x ) {
+gsub("(^[[:space:]]+|[[:space:]]+$)", "", x)
+}
+repdata_clean_with_no_na$interval <- as.numeric(trim(repdata_clean_with_no_na$interval))
+removeNAs <- function(x){
+if (is.na(x["steps"]))
+{
+if (weekdays(as.Date(x["date"])) == "Saturday" | weekdays(as.Date(x["date"]))== "Sunday")
+{
+x["steps"] = interval_ts_weekend[interval_ts_weekend["interval"] == as.numeric(x["interval"]),]["average_steps"][1]
+} else {
+x["steps"] = interval_ts_weekday[interval_ts_weekday["interval"] == as.numeric(x["interval"]),]["average_steps"][1]
+}
+}
+return(x)
+}
+repdata_clean_no_na_result <- apply(repdata_clean_with_no_na,1, removeNAs)
+repdata_clean_no_na_final <- do.call(rbind.data.frame, repdata_clean_no_na_result)
+# turn factor back to into numeric, dates
+repdata_clean_no_na_final$steps <- as.numeric(as.character(repdata_clean_no_na_final$steps))
+repdata_clean_no_na_final$date <- as.Date(as.character(repdata_clean_no_na_final$date))
+```
+### 4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+```{r echo=TRUE, fig.width=10, fig.height=8, message=FALSE}
+#draw histogram
+hist(with(repdata_clean_no_na_final, tapply(steps, date, sum)), main=paste("Histogram of the Total Number of Steps Taken Each Day (Replaced NAs)"), xlab=paste("Total Number of Steps Taken Each Day"), col="red")
+```
+```{r echo=TRUE}
+#mean with replaced NAs
+with(repdata_clean_no_na_final, tapply(steps, date, mean))
 
-## What is mean total number of steps taken per day?
+#median with replaced NAs
+with(repdata_clean_no_na_final, tapply(steps, date, median))
+```
+By adding missing data, more days of data are added. The shape of the histogram doesn't appear to change too much, there are more days with number of steps closer to the mean (since the mean was used to fill the NAs).    
 
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+## V. Are there differences in activity patterns between weekdays and weekends?
+### Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+``` {r echo=TRUE}
+fdata <- factor(c("weekend","weekday"))
+repdata_clean_no_na_final$weekends <- ifelse(weekdays(repdata_clean_no_na_final$date) == "Saturday" | weekdays(repdata_clean_no_na_final$date) == "Sunday", fdata[1], fdata[2])
+```
+### Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+```{r echo=TRUE, fig.width=10, fig.height=8, message=FALSE}
+#Using the objects 'interval_ts_weekday' and 'interval_ts_weeknd' created from previous questions
+par(mfrow = c(2, 1))
+plot(interval_ts_weekday$interval, interval_ts_weekday$average_steps, type="l", ylab=paste("Average Number of Steps"), xlab=paste("5-minute Interval Label"), main=paste("Weekday"))
+plot(interval_ts_weekend$interval, interval_ts_weekend$average_steps, type="l", ylab=paste("Average Number of Steps"), xlab=paste("5-minute Interval Label"), main=paste("Weekend"))
+```
